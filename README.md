@@ -146,3 +146,78 @@ For **PA5**, its 2 mode bits are at positions **[11:10]**.
 - `GPIO_MODER_MODER5` is a mask that targets both bits (clears them).
 - `GPIO_MODER_MODER5_0` sets the **lower bit** of that pair (bit 10), which corresponds to mode `01` — **output**.
 
+## 🧾 Step 7: Toggle LED on Button Press (with Debounce)
+
+### 🔁 What We're Doing
+
+- We're **polling** the button (PC13) in a loop.
+- If the button is **pressed** (logic low), we:
+  - Wait a short time (debounce).
+  - Wait until the button is released.
+  - Wait again (debounce after release).
+  - Then **toggle the LED** (PA5).
+
+### 💡 Key Code
+
+```c
+if (!(GPIOC->IDR & GPIO_IDR_ID13)) {
+    for (volatile int i = 0; i < 1000; i++);    // Debounce delay
+
+    while (!(GPIOC->IDR & GPIO_IDR_ID13));     // Wait for release
+
+    for (volatile int i = 0; i < 1000; i++);    // Debounce delay
+
+    GPIOA->ODR ^= GPIO_ODR_OD5;                // Toggle LED
+}
+```
+### 🔍 Explanation
+
+- GPIOC->IDR & GPIO_IDR_ID13 checks input state of PC13.
+
+   - It’s 0 when button is pressed, due to pull-up.
+
+- GPIOA->ODR ^= GPIO_ODR_OD5 toggles the output state of PA5.
+
+- The simple for loops add a blocking delay to debounce the input.
+
+## Now check the final code below
+
+```c
+#include "stm32f4xx.h"  // Device-specific header from CMSIS, provides register definitions
+
+int main(void) 
+{
+	// 1. Enable clocks for GPIOA and GPIOC using RCC (Reset and Clock Control)
+	RCC->AHB1ENR |= (1 << 0);  /* Enable clock for GPIOA (bit 0 of AHB1ENR) */
+	RCC->AHB1ENR |= (1 << 2);  /* Enable clock for GPIOC (bit 2 of AHB1ENR) */
+
+	// 2. Configure PA5 (onboard LED) as General Purpose Output
+	GPIOA->MODER &= ~GPIO_MODER_MODER5;   /* Clear mode bits [11:10] for PA5 */
+	GPIOA->MODER |=  GPIO_MODER_MODER5_0; /* Set mode bits to 01: output mode */
+
+	// 3. Configure PC13 (user button) as input
+	GPIOC->MODER &= ~GPIO_MODER_MODER13;  /* Clear mode bits [27:26] for PC13 — sets it to input (00) */
+
+	while (1) /* Infinite loop — keeps the MCU running */
+	{
+		while (1) /* Inner loop: continuously check button state */
+		{
+			if (!(GPIOC->IDR & GPIO_IDR_ID13)) 
+			/* Check if PC13 is LOW (button pressed). Active-low logic is used here. */
+			{
+				for (volatile int i = 0; i < 1000; i++); 
+				/* Simple delay loop to debounce the initial press (approx. 1–5 ms) */
+
+				while (!(GPIOC->IDR & GPIO_IDR_ID13));  
+				/* Wait here until button is released (PC13 goes HIGH) */
+
+				for (volatile int i = 0; i < 1000; i++); 
+				/* Debounce delay after button release */
+
+				GPIOA->ODR ^= GPIO_ODR_OD5;  
+				/* Toggle PA5 (LED) using XOR: if it was ON, turn OFF, and vice versa */
+			}
+		}
+	}
+}
+```
